@@ -4,123 +4,138 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Pose Quiz - Trắc nghiệm tương tác</title>
+    <!-- MediaPipe Pose -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
-    <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background: #1a1a1a; color: white; font-family: sans-serif; }
-        canvas { display: block; margin: 0 auto; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .setup-input { background: #334155; border: 1px solid #475569; border-radius: 8px; padding: 10px; color: white; width: 100%; }
-        .setup-input:focus { outline: 2px solid #3b82f6; }
+        body { margin: 0; padding: 0; overflow: hidden; background: #0f172a; color: white; font-family: sans-serif; }
+        #canvas-container { position: relative; width: 640px; height: 480px; margin: 0 auto; }
+        canvas { border-radius: 1rem; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        .setup-input { background: #1e293b; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.75rem; color: white; width: 100%; transition: all 0.2s; }
+        .setup-input:focus { border-color: #3b82f6; ring: 2px solid #3b82f6; outline: none; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
-    <!-- Màn hình thiết lập câu hỏi -->
-    <div id="setup-screen" class="fixed inset-0 bg-slate-900 z-50 p-8 flex flex-col items-center overflow-y-auto">
-        <h1 class="text-3xl font-bold mb-6 text-blue-400">Thiết Lập Câu Hỏi Trắc Nghiệm</h1>
-        
-        <div id="questions-container" class="w-full max-w-2xl space-y-6">
-            <!-- Câu hỏi mẫu -->
-            <div class="q-item bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl">
-                <label class="block mb-2 font-semibold">Câu hỏi:</label>
-                <input type="text" placeholder="Nhập câu hỏi..." class="q-text setup-input mb-4" value="Thủ đô của Việt Nam là gì?">
-                
-                <label class="block mb-2 font-semibold text-sm">Các đáp án:</label>
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="flex items-center space-x-2">
-                        <span class="text-red-400 font-bold">A</span>
-                        <input type="text" class="ans-a setup-input text-sm" value="Hà Nội">
+    <!-- Màn hình thiết lập -->
+    <div id="setup-screen" class="fixed inset-0 bg-slate-950 z-50 p-6 flex flex-col items-center overflow-y-auto">
+        <div class="max-w-2xl w-full">
+            <h1 class="text-4xl font-extrabold mb-8 text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">AI QUIZ SETUP</h1>
+            
+            <div id="questions-container" class="space-y-6">
+                <div class="q-item bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-2xl">
+                    <label class="block mb-2 text-slate-400 font-medium">Câu hỏi 1:</label>
+                    <input type="text" class="q-text setup-input mb-4" value="Đâu là thủ đô của Việt Nam?">
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <span class="text-xs font-bold text-red-500 ml-1">A</span>
+                            <input type="text" class="ans-a setup-input text-sm" value="Hà Nội">
+                        </div>
+                        <div class="space-y-1">
+                            <span class="text-xs font-bold text-blue-500 ml-1">B</span>
+                            <input type="text" class="ans-b setup-input text-sm" value="TP. Hồ Chí Minh">
+                        </div>
+                        <div class="space-y-1">
+                            <span class="text-xs font-bold text-yellow-500 ml-1">C</span>
+                            <input type="text" class="ans-c setup-input text-sm" value="Đà Nẵng">
+                        </div>
+                        <div class="space-y-1">
+                            <span class="text-xs font-bold text-emerald-500 ml-1">D</span>
+                            <input type="text" class="ans-d setup-input text-sm" value="Cần Thơ">
+                        </div>
                     </div>
-                    <div class="flex items-center space-x-2">
-                        <span class="text-blue-400 font-bold">B</span>
-                        <input type="text" class="ans-b setup-input text-sm" value="TP.HCM">
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <span class="text-yellow-400 font-bold">C</span>
-                        <input type="text" class="ans-c setup-input text-sm" value="Đà Nẵng">
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <span class="text-green-400 font-bold">D</span>
-                        <input type="text" class="ans-d setup-input text-sm" value="Huế">
+                    
+                    <div class="mt-4">
+                        <label class="block mb-2 text-xs font-bold text-slate-500">ĐÁP ÁN ĐÚNG</label>
+                        <select class="correct-ans setup-input font-bold text-emerald-400 border-emerald-900/50">
+                            <option value="0">Đáp án A</option>
+                            <option value="1">Đáp án B</option>
+                            <option value="2">Đáp án C</option>
+                            <option value="3">Đáp án D</option>
+                        </select>
                     </div>
                 </div>
-                
-                <label class="block mt-4 mb-2 font-semibold text-sm">Đáp án đúng:</label>
-                <select class="correct-ans setup-input bg-green-900 border-green-700">
-                    <option value="0">Đáp án A</option>
-                    <option value="1">Đáp án B</option>
-                    <option value="2">Đáp án C</option>
-                    <option value="3">Đáp án D</option>
-                </select>
             </div>
-        </div>
 
-        <div class="mt-8 space-x-4 flex sticky bottom-0 bg-slate-900 py-4 w-full justify-center">
-            <button onclick="addQuestion()" class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-full font-bold transition border border-slate-500"> + Thêm câu hỏi </button>
-            <button onclick="startGame()" class="bg-blue-600 hover:bg-blue-500 px-10 py-2 rounded-full font-bold transition shadow-lg animate-pulse"> BẮT ĐẦU CHƠI </button>
+            <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center pb-10">
+                <button onclick="addQuestion()" class="bg-slate-800 hover:bg-slate-700 text-white px-8 py-3 rounded-xl font-bold transition-all border border-slate-700"> + Thêm câu hỏi </button>
+                <button onclick="startGame()" class="bg-blue-600 hover:bg-blue-500 text-white px-12 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20"> BẮT ĐẦU CHƠI </button>
+            </div>
         </div>
     </div>
 
-    <!-- Màn hình hiển thị Game -->
-    <div id="game-container" class="hidden relative flex flex-col items-center justify-center min-h-screen">
-        <div id="canvas-parent" class="relative">
-            <!-- Canvas sẽ được chèn vào đây -->
-        </div>
-        
-        <div class="mt-4 text-center max-w-2xl px-4">
-            <p id="game-status" class="text-xl font-semibold text-yellow-400 h-8">Đang khởi tạo...</p>
-            <div class="flex justify-between items-center mt-2 w-full bg-slate-800 p-3 rounded-lg border border-slate-700">
-                <p id="question-count" class="text-slate-400">Câu 1 / 1</p>
-                <p id="score-display" class="text-2xl font-bold text-green-400">Điểm: 0</p>
+    <!-- Màn hình trò chơi -->
+    <div id="game-screen" class="hidden min-h-screen flex flex-col items-center justify-center p-4">
+        <!-- Thông tin câu hỏi -->
+        <div id="question-overlay" class="mb-6 w-full max-w-4xl bg-slate-900/80 backdrop-blur p-6 rounded-2xl border border-white/10 text-center shadow-2xl">
+            <h2 id="display-question" class="text-2xl font-bold text-white mb-2">Đang tải...</h2>
+            <div class="flex justify-between items-center text-sm font-mono px-4">
+                <span id="q-progress" class="text-blue-400">CÂU 1/1</span>
+                <span id="display-score" class="text-emerald-400 text-xl font-bold">ĐIỂM: 0</span>
             </div>
         </div>
 
-        <button onclick="location.reload()" class="absolute top-4 right-4 bg-red-600/50 hover:bg-red-600 p-2 rounded-lg text-xs transition">Thoát cài đặt</button>
+        <div id="canvas-container">
+            <!-- p5 canvas sẽ tự render vào đây -->
+            <div id="loading-overlay" class="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center z-10 rounded-2xl">
+                <div class="loader mb-4"></div>
+                <p class="animate-pulse">Đang tải mô hình AI...</p>
+            </div>
+            <video id="input-video" class="hidden" playsinline></video>
+        </div>
+
+        <div class="mt-6 text-center">
+            <p id="instruction" class="text-slate-400 text-lg">Giơ cao cánh tay của bạn để chọn đáp án</p>
+            <button onclick="location.reload()" class="mt-4 text-xs text-slate-500 hover:text-red-400 underline">Quay lại cài đặt</button>
+        </div>
     </div>
 
     <script>
-        let video;
-        let poseNet;
-        let poses = [];
-        let gameState = "SETUP"; 
         let quizData = [];
-        let currentQuestionIndex = 0;
+        let currentIdx = 0;
         let score = 0;
-        let isModelReady = false;
-        
-        // Vùng chọn (A: Trên Trái, B: Trên Phải, C: Dưới Trái, D: Dưới Phải)
-        let zones = [
-            { id: 0, label: 'A', x: 20, y: 20, w: 180, h: 100, color: [239, 68, 68], progress: 0 },
-            { id: 1, label: 'B', x: 440, y: 20, w: 180, h: 100, color: [59, 130, 246], progress: 0 },
-            { id: 2, label: 'C', x: 20, y: 360, w: 180, h: 100, color: [245, 158, 11], progress: 0 },
-            { id: 3, label: 'D', x: 440, y: 360, w: 180, h: 100, color: [16, 185, 129], progress: 0 }
+        let gameState = "SETUP";
+        let poseResults = null;
+
+        // Cấu hình vùng chọn
+        const zones = [
+            { id: 0, label: 'A', x: 20, y: 20, w: 180, h: 120, color: [239, 68, 68], progress: 0 },
+            { id: 1, label: 'B', x: 440, y: 20, w: 180, h: 120, color: [59, 130, 246], progress: 0 },
+            { id: 2, label: 'C', x: 20, y: 340, w: 180, h: 120, color: [245, 158, 11], progress: 0 },
+            { id: 3, label: 'D', x: 440, y: 340, w: 180, h: 120, color: [16, 185, 129], progress: 0 }
         ];
 
-        const SELECTION_TIME = 45; // Khoảng 1.5 giây
+        const THRESHOLD = 35; // Thời gian giữ tay để chọn
 
         function addQuestion() {
             const container = document.getElementById('questions-container');
+            const qNum = container.children.length + 1;
             const div = document.createElement('div');
-            div.className = "q-item bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl";
+            div.className = "q-item bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-2xl relative animate-in fade-in slide-in-from-bottom-4 duration-300";
             div.innerHTML = `
-                <label class="block mb-2 font-semibold">Câu hỏi:</label>
-                <input type="text" placeholder="Nhập câu hỏi..." class="q-text setup-input mb-4">
-                <label class="block mb-2 font-semibold text-sm">Các đáp án:</label>
-                <div class="grid grid-cols-2 gap-3">
-                    <input type="text" placeholder="A" class="ans-a setup-input text-sm">
-                    <input type="text" placeholder="B" class="ans-b setup-input text-sm">
-                    <input type="text" placeholder="C" class="ans-c setup-input text-sm">
-                    <input type="text" placeholder="D" class="ans-d setup-input text-sm">
+                <button onclick="this.parentElement.remove()" class="absolute top-4 right-4 text-slate-600 hover:text-red-500">✕</button>
+                <label class="block mb-2 text-slate-400 font-medium">Câu hỏi ${qNum}:</label>
+                <input type="text" class="q-text setup-input mb-4" placeholder="Nhập câu hỏi...">
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="text" class="ans-a setup-input text-sm" placeholder="Đáp án A">
+                    <input type="text" class="ans-b setup-input text-sm" placeholder="Đáp án B">
+                    <input type="text" class="ans-c setup-input text-sm" placeholder="Đáp án C">
+                    <input type="text" class="ans-d setup-input text-sm" placeholder="Đáp án D">
                 </div>
-                <label class="block mt-4 mb-2 font-semibold text-sm">Đáp án đúng:</label>
-                <select class="correct-ans setup-input bg-green-900 border-green-700">
-                    <option value="0">Đáp án A</option>
-                    <option value="1">Đáp án B</option>
-                    <option value="2">Đáp án C</option>
-                    <option value="3">Đáp án D</option>
-                </select>
-                <button onclick="this.parentElement.remove()" class="text-red-400 text-xs mt-4 hover:underline">Xóa câu hỏi này</button>
+                <div class="mt-4">
+                    <select class="correct-ans setup-input font-bold">
+                        <option value="0">Đáp án A</option>
+                        <option value="1">Đáp án B</option>
+                        <option value="2">Đáp án C</option>
+                        <option value="3">Đáp án D</option>
+                    </select>
+                </div>
             `;
             container.appendChild(div);
             div.scrollIntoView({ behavior: 'smooth' });
@@ -129,7 +144,7 @@
         function startGame() {
             const items = document.querySelectorAll('.q-item');
             quizData = Array.from(items).map(item => ({
-                question: item.querySelector('.q-text').value || "Câu hỏi không tên",
+                question: item.querySelector('.q-text').value || "Câu hỏi không tiêu đề",
                 options: [
                     item.querySelector('.ans-a').value || "A",
                     item.querySelector('.ans-b').value || "B",
@@ -142,192 +157,185 @@
             if(quizData.length === 0) return alert("Vui lòng thêm ít nhất 1 câu hỏi!");
 
             document.getElementById('setup-screen').classList.add('hidden');
-            document.getElementById('game-container').classList.remove('hidden');
-            
-            // Khởi tạo p5 theo cách thủ công để đảm bảo nó render vào đúng thời điểm
-            if (!window.p5Instance) {
-                window.p5Instance = new p5(gameSketch);
-            }
+            document.getElementById('game-screen').classList.remove('hidden');
             gameState = "PLAYING";
+            
+            // Khởi động MediaPipe
+            initMediaPipe();
         }
 
-        // Sketch chính của game
+        function initMediaPipe() {
+            const videoElement = document.getElementById('input-video');
+            const pose = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            pose.onResults(results => {
+                poseResults = results;
+                document.getElementById('loading-overlay').classList.add('hidden');
+            });
+
+            const camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await pose.send({image: videoElement});
+                },
+                width: 640,
+                height: 480
+            });
+            camera.start();
+
+            // Khởi chạy p5.js
+            new p5(gameSketch, 'canvas-container');
+        }
+
         const gameSketch = (p) => {
             p.setup = () => {
-                let canvas = p.createCanvas(640, 480);
-                canvas.parent('canvas-parent');
-                
-                video = p.createCapture(p.VIDEO);
-                video.size(640, 480);
-                video.hide();
-
-                poseNet = ml5.poseNet(video, () => {
-                    isModelReady = true;
-                    document.getElementById('game-status').innerText = "Giơ tay vào ô đáp án để chọn!";
-                });
-
-                poseNet.on('pose', results => {
-                    poses = results;
-                });
+                p.createCanvas(640, 480);
             };
 
             p.draw = () => {
-                if (gameState === "SETUP") return;
+                p.clear();
+                
+                // Vẽ Video (Lật gương)
+                if (poseResults && poseResults.image) {
+                    p.push();
+                    p.translate(p.width, 0);
+                    p.scale(-1, 1);
+                    p.image(poseResults.image, 0, 0, p.width, p.height);
+                    p.pop();
+                }
 
-                // 1. Vẽ Camera Mirror
-                p.push();
-                p.translate(p.width, 0);
-                p.scale(-1, 1);
-                p.image(video, 0, 0, p.width, p.height);
-                p.pop();
-
-                // Overlay tối để dễ đọc chữ
                 p.fill(0, 0, 0, 100);
                 p.rect(0, 0, p.width, p.height);
 
                 if (gameState === "PLAYING") {
-                    updateQuestionDisplay();
-                    let currentQ = quizData[currentQuestionIndex];
+                    updateUI();
+                    let currentQ = quizData[currentIdx];
                     
-                    // 2. Vẽ câu hỏi
-                    p.textAlign(p.CENTER, p.CENTER);
+                    // Vẽ các vùng đáp án
+                    drawZones(p, currentQ);
+                    
+                    // Xử lý tay
+                    handleHandTracking(p);
+                } else if (gameState === "FEEDBACK") {
                     p.fill(255);
-                    p.textSize(26);
-                    p.textStyle(p.BOLD);
-                    p.text(currentQ.question, 40, p.height/2 - 60, p.width - 80, 100);
-
-                    // 3. Xử lý logic tay
-                    checkWrists(p);
-
-                    // 4. Vẽ các ô đáp án
-                    drawGameZones(p, currentQ);
-                } else if (gameState === "PAUSED") {
-                    // Trạng thái chờ qua câu mới - vẽ kết quả vừa chọn
-                    p.fill(255, 200);
-                    p.textSize(32);
                     p.textAlign(p.CENTER, p.CENTER);
-                    p.text("Kiểm tra kết quả...", p.width/2, p.height/2);
-                } else if (gameState === "FINISHED") {
-                    showFinalResult(p);
+                    p.textSize(32);
+                    p.text("Xác nhận lựa chọn...", p.width/2, p.height/2);
+                } else if (gameState === "END") {
+                    p.background(15, 23, 42);
+                    p.fill(255);
+                    p.textAlign(p.CENTER, p.CENTER);
+                    p.textSize(40);
+                    p.text("KẾT THÚC!", p.width/2, p.height/2 - 40);
+                    p.textSize(24);
+                    p.text(`Điểm số: ${score}`, p.width/2, p.height/2 + 10);
                 }
             };
         };
 
-        function updateQuestionDisplay() {
-            document.getElementById('question-count').innerText = `Câu ${currentQuestionIndex + 1} / ${quizData.length}`;
+        function updateUI() {
+            document.getElementById('display-question').innerText = quizData[currentIdx].question;
+            document.getElementById('q-progress').innerText = `CÂU ${currentIdx + 1}/${quizData.length}`;
+            document.getElementById('display-score').innerText = `ĐIỂM: ${score}`;
         }
 
-        function drawGameZones(p, q) {
+        function drawZones(p, q) {
             zones.forEach((z, i) => {
-                let isHovered = z.progress > 0;
-                
-                // Vẽ khung nền
-                p.fill(z.color[0], z.color[1], z.color[2], isHovered ? 200 : 120);
+                let active = z.progress > 0;
+                p.fill(z.color[0], z.color[1], z.color[2], active ? 220 : 130);
                 p.noStroke();
                 p.rect(z.x, z.y, z.w, z.h, 15);
 
-                // Vẽ chữ A, B, C, D
+                // Nhãn A,B,C,D
                 p.fill(255);
-                p.textSize(36);
                 p.textAlign(p.CENTER, p.TOP);
+                p.textSize(30);
                 p.text(z.label, z.x + z.w/2, z.y + 10);
 
-                // Vẽ nội dung đáp án
+                // Nội dung câu trả lời
                 p.textSize(16);
                 p.textAlign(p.CENTER, p.CENTER);
-                p.text(q.options[i], z.x + 10, z.y + 40, z.w - 20, 60);
+                p.text(q.options[i], z.x + 10, z.y + 45, z.w - 20, 60);
 
-                // Thanh tiến trình (Loading bar)
+                // Loading bar
                 if (z.progress > 0) {
-                    p.fill(255, 255, 255, 150);
+                    p.fill(255, 255, 255, 100);
                     p.rect(z.x + 10, z.y + z.h - 15, z.w - 20, 8, 4);
                     p.fill(255);
-                    let progressW = p.map(z.progress, 0, SELECTION_TIME, 0, z.w - 20);
-                    p.rect(z.x + 10, z.y + z.h - 15, progressW, 8, 4);
+                    let w = p.map(z.progress, 0, THRESHOLD, 0, z.w - 20);
+                    p.rect(z.x + 10, z.y + z.h - 15, w, 8, 4);
                 }
             });
         }
 
-        function checkWrists(p) {
-            if (!isModelReady || poses.length === 0) return;
+        function handleHandTracking(p) {
+            if (!poseResults || !poseResults.poseLandmarks) return;
 
-            let pose = poses[0].pose;
-            let joints = [];
-            
-            // Theo dõi cổ tay trái và phải
-            if (pose.leftWrist.confidence > 0.3) joints.push({ x: p.width - pose.leftWrist.x, y: pose.leftWrist.y });
-            if (pose.rightWrist.confidence > 0.3) joints.push({ x: p.width - pose.rightWrist.x, y: pose.rightWrist.y });
+            const landmarks = poseResults.poseLandmarks;
+            const hands = [
+                { x: (1 - landmarks[15].x) * p.width, y: landmarks[15].y * p.height }, // Cổ tay trái (đã lật gương)
+                { x: (1 - landmarks[16].x) * p.width, y: landmarks[16].y * p.height }  // Cổ tay phải (đã lật gương)
+            ];
 
             // Vẽ điểm định vị tay
-            p.fill(0, 255, 255);
+            p.fill(34, 211, 238);
             p.noStroke();
-            joints.forEach(j => {
-                p.ellipse(j.x, j.y, 20);
+            hands.forEach(h => {
+                p.ellipse(h.x, h.y, 25);
                 p.noFill();
-                p.stroke(0, 255, 255);
-                p.ellipse(j.x, j.y, 30 + p.sin(p.frameCount * 0.1) * 10);
+                p.stroke(255);
+                p.ellipse(h.x, h.y, 35);
             });
 
-            // Kiểm tra va chạm
+            // Check va chạm
             zones.forEach(z => {
-                let isInside = joints.some(j => (j.x > z.x && j.x < z.x + z.w && j.y > z.y && j.y < z.y + z.h));
-                if (isInside) {
+                let inside = hands.some(h => h.x > z.x && h.x < z.x + z.w && h.y > z.y && h.y < z.y + z.h);
+                if (inside) {
                     z.progress++;
-                    if (z.progress >= SELECTION_TIME) {
-                        validateAnswer(z.id);
-                        resetAllProgress();
+                    if (z.progress >= THRESHOLD) {
+                        checkAnswer(z.id);
+                        zones.forEach(v => v.progress = 0);
                     }
                 } else {
-                    z.progress = p.max(0, z.progress - 1.5);
+                    z.progress = p.max(0, z.progress - 1);
                 }
             });
         }
 
-        function validateAnswer(selectedIdx) {
+        function checkAnswer(id) {
             if (gameState !== "PLAYING") return;
             
-            gameState = "PAUSED";
-            let correct = quizData[currentQuestionIndex].correct;
-            let statusEl = document.getElementById('game-status');
+            gameState = "FEEDBACK";
+            const correct = quizData[currentIdx].correct;
+            const instruction = document.getElementById('instruction');
 
-            if (selectedIdx === correct) {
+            if (id === correct) {
                 score += 10;
-                statusEl.innerText = "CHÍNH XÁC! 🎉";
-                statusEl.className = "text-xl font-bold text-green-400 scale-110 transition-all";
+                instruction.innerText = "CHÍNH XÁC! 🎉";
+                instruction.className = "text-emerald-400 text-2xl font-bold animate-bounce";
             } else {
-                statusEl.innerText = `SAI RỒI! Đáp án là ${zones[correct].label} ❌`;
-                statusEl.className = "text-xl font-bold text-red-400";
+                instruction.innerText = `SAI RỒI! Đáp án đúng là ${zones[correct].label}`;
+                instruction.className = "text-red-400 text-2xl font-bold";
             }
 
-            document.getElementById('score-display').innerText = "Điểm: " + score;
-
             setTimeout(() => {
-                currentQuestionIndex++;
-                if (currentQuestionIndex >= quizData.length) {
-                    gameState = "FINISHED";
+                currentIdx++;
+                if (currentIdx >= quizData.length) {
+                    gameState = "END";
                 } else {
                     gameState = "PLAYING";
-                    statusEl.innerText = "Giơ tay vào ô đáp án để chọn!";
-                    statusEl.className = "text-xl font-semibold text-yellow-400";
+                    instruction.innerText = "Giơ cao cánh tay của bạn để chọn đáp án";
+                    instruction.className = "text-slate-400 text-lg";
                 }
             }, 2500);
-        }
-
-        function resetAllProgress() {
-            zones.forEach(z => z.progress = 0);
-        }
-
-        function showFinalResult(p) {
-            p.background(15, 23, 42);
-            p.textAlign(p.CENTER, p.CENTER);
-            p.fill(255);
-            p.textSize(40);
-            p.text("KẾT THÚC!", p.width/2, p.height/2 - 50);
-            p.textSize(24);
-            p.text(`Bạn đạt được: ${score} điểm`, p.width/2, p.height/2 + 10);
-            p.textSize(16);
-            p.fill(148, 163, 184);
-            p.text("Nhấn nút 'Thoát' ở góc màn hình để bắt đầu lại", p.width/2, p.height/2 + 60);
         }
     </script>
 </body>
