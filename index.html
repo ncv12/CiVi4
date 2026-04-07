@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Pose Quiz - Trắc nghiệm tương tác</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #1a1a1a; color: white; font-family: sans-serif; }
+        canvas { display: block; margin: 0 auto; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .pointer-events-auto { pointer-events: auto; }
+        .loading-bar { height: 4px; background: #4ade80; transition: width 0.1s; }
+    </style>
+</head>
+<body>
+
+    <!-- Màn hình thiết lập câu hỏi -->
+    <div id="setup-screen" class="fixed inset-0 bg-slate-900 z-50 p-8 flex flex-col items-center overflow-y-auto">
+        <h1 class="text-3xl font-bold mb-6 text-blue-400">Thiết Lập Câu Hỏi Trắc Nghiệm</h1>
+        
+        <div id="questions-container" class="w-full max-w-2xl space-y-4">
+            <!-- Câu hỏi mẫu -->
+            <div class="q-item bg-slate-800 p-4 rounded-lg border border-slate-700">
+                <input type="text" placeholder="Nhập câu hỏi..." class="q-text w-full bg-slate-700 border-none rounded p-2 mb-3 text-white" value="Thủ đô của Việt Nam là gì?">
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="text" placeholder="Đáp án A" class="ans-a bg-slate-600 p-2 rounded text-sm" value="Hà Nội">
+                    <input type="text" placeholder="Đáp án B" class="ans-b bg-slate-600 p-2 rounded text-sm" value="TP.HCM">
+                    <input type="text" placeholder="Đáp án C" class="ans-c bg-slate-600 p-2 rounded text-sm" value="Đà Nẵng">
+                    <input type="text" placeholder="Đáp án D" class="ans-d bg-slate-600 p-2 rounded text-sm" value="Huế">
+                </div>
+                <select class="correct-ans w-full mt-2 bg-green-700 rounded p-1 text-sm">
+                    <option value="0">Đúng là A</option>
+                    <option value="1">Đúng là B</option>
+                    <option value="2">Đúng là C</option>
+                    <option value="3">Đúng là D</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="mt-6 space-x-4 flex">
+            <button onclick="addQuestion()" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-full font-bold transition"> + Thêm Câu Hỏi </button>
+            <button onclick="startGame()" class="bg-green-600 hover:bg-green-500 px-10 py-2 rounded-full font-bold transition shadow-lg"> BẮT ĐẦU CHƠI </button>
+        </div>
+    </div>
+
+    <!-- Màn hình hiển thị Game -->
+    <div id="game-container" class="hidden relative flex flex-col items-center justify-center min-h-screen">
+        <div id="canvas-parent" class="relative border-4 border-slate-700 rounded-2xl overflow-hidden bg-black"></div>
+        
+        <div class="mt-4 text-center">
+            <p id="game-status" class="text-xl font-semibold text-yellow-400">Đang khởi tạo AI...</p>
+            <p id="score-display" class="text-2xl font-bold mt-2">Điểm: 0</p>
+        </div>
+
+        <!-- Nút Reset/Thoát -->
+        <button onclick="location.reload()" class="absolute top-4 right-4 bg-red-600 p-2 rounded-lg text-sm">Thoát / Cài lại</button>
+    </div>
+
+    <script>
+        let video;
+        let poseNet;
+        let poses = [];
+        let gameState = "SETUP"; // SETUP, PLAYING, FINISHED
+        let quizData = [];
+        let currentQuestionIndex = 0;
+        let score = 0;
+        
+        // Cấu hình vùng đáp án (4 góc)
+        let zones = [
+            { id: 0, label: 'A', x: 0, y: 0, w: 200, h: 120, color: [239, 68, 68, 150], progress: 0 },   // Trên Trái
+            { id: 1, label: 'B', x: 440, y: 0, w: 200, h: 120, color: [59, 130, 246, 150], progress: 0 },  // Trên Phải
+            { id: 2, label: 'C', x: 0, y: 360, w: 200, h: 120, color: [245, 158, 11, 150], progress: 0 }, // Dưới Trái
+            { id: 3, label: 'D', x: 440, y: 360, w: 200, h: 120, color: [16, 185, 129, 150], progress: 0 } // Dưới Phải
+        ];
+
+        const SELECTION_TIME = 40; // ~1.5 giây ở 30-60fps
+
+        function addQuestion() {
+            const container = document.getElementById('questions-container');
+            const div = document.createElement('div');
+            div.className = "q-item bg-slate-800 p-4 rounded-lg border border-slate-700";
+            div.innerHTML = `
+                <input type="text" placeholder="Nhập câu hỏi..." class="q-text w-full bg-slate-700 border-none rounded p-2 mb-3 text-white">
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="text" placeholder="Đáp án A" class="ans-a bg-slate-600 p-2 rounded text-sm">
+                    <input type="text" placeholder="Đáp án B" class="ans-b bg-slate-600 p-2 rounded text-sm">
+                    <input type="text" placeholder="Đáp án C" class="ans-c bg-slate-600 p-2 rounded text-sm">
+                    <input type="text" placeholder="Đáp án D" class="ans-d bg-slate-600 p-2 rounded text-sm">
+                </div>
+                <select class="correct-ans w-full mt-2 bg-green-700 rounded p-1 text-sm">
+                    <option value="0">Đúng là A</option>
+                    <option value="1">Đúng là B</option>
+                    <option value="2">Đúng là C</option>
+                    <option value="3">Đúng là D</option>
+                </select>
+                <button onclick="this.parentElement.remove()" class="text-red-400 text-xs mt-2 underline">Xóa câu này</button>
+            `;
+            container.appendChild(div);
+        }
+
+        function startGame() {
+            // Thu thập dữ liệu
+            const items = document.querySelectorAll('.q-item');
+            quizData = Array.from(items).map(item => ({
+                question: item.querySelector('.q-text').value,
+                options: [
+                    item.querySelector('.ans-a').value,
+                    item.querySelector('.ans-b').value,
+                    item.querySelector('.ans-c').value,
+                    item.querySelector('.ans-d').value
+                ],
+                correct: parseInt(item.querySelector('.correct-ans').value)
+            }));
+
+            if(quizData.length === 0) return alert("Vui lòng thêm ít nhất 1 câu hỏi!");
+
+            document.getElementById('setup-screen').classList.add('hidden');
+            document.getElementById('game-container').classList.remove('hidden');
+            gameState = "PLAYING";
+            initP5();
+        }
+
+        function initP5() {
+            new p5();
+        }
+
+        function setup() {
+            let canvas = createCanvas(640, 480);
+            canvas.parent('canvas-parent');
+            
+            video = createCapture(VIDEO);
+            video.size(640, 480);
+            video.hide();
+
+            poseNet = ml5.poseNet(video, () => {
+                document.getElementById('game-status').innerText = "AI đã sẵn sàng! Đưa tay vào vùng đáp án để chọn.";
+            });
+
+            poseNet.on('pose', results => {
+                poses = results;
+            });
+        }
+
+        function draw() {
+            if (gameState !== "PLAYING") return;
+
+            // Hiển thị Camera lật ngược (Mirror)
+            push();
+            translate(width, 0);
+            scale(-1, 1);
+            image(video, 0, 0, width, height);
+            pop();
+
+            // Vẽ lớp phủ tối nhẹ để nổi bật chữ
+            fill(0, 0, 0, 80);
+            rect(0, 0, width, height);
+
+            // Hiển thị câu hỏi hiện tại
+            let currentQ = quizData[currentQuestionIndex];
+            if (currentQ) {
+                textAlign(CENTER);
+                fill(255);
+                textSize(24);
+                textStyle(BOLD);
+                text(currentQ.question, width/2, height/2 - 20);
+                
+                // Vẽ các vùng đáp án
+                drawZones(currentQ);
+                
+                // Kiểm tra vị trí cổ tay
+                checkWristInZones();
+            } else {
+                showResult();
+            }
+        }
+
+        function drawZones(q) {
+            zones.forEach((z, i) => {
+                // Hiệu ứng khi đang chọn
+                let alpha = z.progress > 0 ? 200 : 120;
+                fill(z.color[0], z.color[1], z.color[2], alpha);
+                noStroke();
+                rect(z.x, z.y, z.w, z.h, 10);
+
+                // Chữ đáp án (A, B, C, D)
+                fill(255);
+                textSize(40);
+                textAlign(CENTER, CENTER);
+                text(z.label, z.x + z.w/2, z.y + z.h/3);
+
+                // Nội dung đáp án
+                textSize(16);
+                text(q.options[i], z.x + z.w/2, z.y + (z.h * 0.7));
+
+                // Thanh progress nạp đầy
+                if (z.progress > 0) {
+                    fill(255, 255, 255, 100);
+                    rect(z.x, z.y + z.h - 10, z.w, 10, 5);
+                    fill(74, 222, 128);
+                    rect(z.x, z.y + z.h - 10, (z.progress / SELECTION_TIME) * z.w, 10, 5);
+                }
+            });
+        }
+
+        function checkWristInZones() {
+            if (poses.length === 0) return;
+
+            let wrists = [];
+            let pose = poses[0].pose;
+            
+            // Lấy tọa độ cổ tay (PoseNet trả về tọa độ chuẩn, nhưng video bị lật nên ta phải xử lý)
+            // Vì ta translate(width, 0) và scale(-1, 1) cho video, 
+            // nên x_canvas = width - x_pose
+            if (pose.leftWrist.confidence > 0.5) wrists.push({ x: width - pose.leftWrist.x, y: pose.leftWrist.y });
+            if (pose.rightWrist.confidence > 0.5) wrists.push({ x: width - pose.rightWrist.x, y: pose.rightWrist.y });
+
+            // Hiển thị điểm tracker cho người dùng thấy tay mình ở đâu
+            fill(255, 255, 0);
+            wrists.forEach(w => ellipse(w.x, w.y, 25));
+
+            let anyZoneActive = false;
+
+            zones.forEach(z => {
+                let inside = wrists.some(w => (w.x > z.x && w.x < z.x + z.w && w.y > z.y && w.y < z.y + z.h));
+                
+                if (inside) {
+                    z.progress++;
+                    anyZoneActive = true;
+                    if (z.progress >= SELECTION_TIME) {
+                        submitAnswer(z.id);
+                        resetProgress();
+                    }
+                } else {
+                    z.progress = Math.max(0, z.progress - 1);
+                }
+            });
+        }
+
+        function submitAnswer(idx) {
+            let correct = quizData[currentQuestionIndex].correct;
+            if (idx === correct) {
+                score += 10;
+                document.getElementById('game-status').innerText = "CHÍNH XÁC! +10 điểm";
+                document.getElementById('game-status').style.color = "#4ade80";
+            } else {
+                document.getElementById('game-status').innerText = "SAI RỒI! Đáp án đúng là " + zones[correct].label;
+                document.getElementById('game-status').style.color = "#f87171";
+            }
+            
+            document.getElementById('score-display').innerText = "Điểm: " + score;
+            
+            // Tạm dừng 2 giây trước khi qua câu tiếp theo
+            gameState = "PAUSED";
+            setTimeout(() => {
+                currentQuestionIndex++;
+                if (currentQuestionIndex >= quizData.length) {
+                    gameState = "FINISHED";
+                } else {
+                    gameState = "PLAYING";
+                    document.getElementById('game-status').innerText = "Hãy chọn đáp án tiếp theo...";
+                    document.getElementById('game-status').style.color = "#fbbf24";
+                }
+            }, 2000);
+        }
+
+        function resetProgress() {
+            zones.forEach(z => z.progress = 0);
+        }
+
+        function showResult() {
+            background(15, 23, 42);
+            fill(255);
+            textAlign(CENTER);
+            textSize(40);
+            text("HOÀN THÀNH!", width/2, height/2 - 40);
+            textSize(24);
+            text("Tổng điểm của bạn: " + score, width/2, height/2 + 10);
+            textSize(16);
+            text("Nhấn 'Thoát' để chơi lại hoặc tạo câu hỏi mới.", width/2, height/2 + 60);
+        }
+    </script>
+</body>
+</html>
